@@ -94,6 +94,46 @@ public class Connection implements Closeable {
         return future;
     }
 
+    public CompletableFuture<Bytes> readLine(Bytes bytes) {
+        return readLine(bytes, 0L, TimeUnit.MILLISECONDS);
+    }
+
+    public CompletableFuture<Bytes> readLine(Bytes bytes, long timeout,
+                                             TimeUnit unit) {
+        final CompletableFuture<Bytes> future = new CompletableFuture<>();
+        final ByteBuffer buffer = bytes.buffer();
+        buffer.clear();
+        buffer.limit(1);
+        channel.read(buffer, timeout, unit, null, new CompletionHandler<Integer, Object>() {
+            @Override
+            public void completed(Integer result, Object attachment) {
+                if (-1 == result) {
+                    buffer.flip();
+                    future.complete(bytes);
+                    return;
+                }
+                if (buffer.hasRemaining()) {
+                    channel.read(buffer, timeout, unit, null, this);
+                } else {
+                    if (10 == buffer.get(buffer.position() - 1)) {
+                        buffer.flip();
+                        future.complete(bytes);
+                    } else {
+                        buffer.limit(buffer.position() + 1);
+                        channel.read(buffer, timeout, unit, null, this);
+                    }
+                }
+            }
+
+            @Override
+            public void failed(Throwable exc, Object attachment) {
+                buffer.flip();
+                future.completeExceptionally(exc);
+            }
+        });
+        return future;
+    }
+
     public CompletableFuture<Bytes> write(Bytes bytes) {
         return write(bytes, 0L, TimeUnit.MILLISECONDS);
     }
