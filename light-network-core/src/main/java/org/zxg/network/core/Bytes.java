@@ -16,6 +16,8 @@
  */
 package org.zxg.network.core;
 
+import sun.nio.ch.DirectBuffer;
+
 import java.nio.ByteBuffer;
 
 /**
@@ -222,6 +224,17 @@ public class Bytes implements Cloneable {
 
     public boolean isDirect() {
         return buffer.isDirect();
+    }
+
+    public void free() {
+        if (buffer.isDirect()) {
+            clean();
+        }
+    }
+
+    public void clean() {
+        final DirectBuffer directBuffer = (DirectBuffer) buffer;
+        directBuffer.cleaner().clean();
     }
 
     public ByteBuffer buffer() {
