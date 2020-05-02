@@ -26,7 +26,9 @@ import java.nio.channels.AsynchronousServerSocketChannel;
 import java.nio.channels.AsynchronousSocketChannel;
 import java.nio.channels.CompletionHandler;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * @author <a href="mailto:xianguang.zhou@outlook.com">Xianguang Zhou</a>
@@ -53,6 +55,10 @@ public class Server implements Closeable {
 
     public void bind(SocketAddress local, int backlog) throws IOException {
         this.channel.bind(local, backlog);
+    }
+
+    public CompletableFuture<Void> serve(Function<Connection, CompletionStage<?>> handler) {
+        return serve(new Handler(handler));
     }
 
     public CompletableFuture<Void> serve(Consumer<Connection> handler) {
