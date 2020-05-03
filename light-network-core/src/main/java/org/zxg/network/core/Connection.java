@@ -160,6 +160,31 @@ public class Connection implements Closeable {
         return future;
     }
 
+    public CompletableFuture<Bytes> writeRange(Bytes bytes, int from, int to) {
+        return writeRange(bytes, from, to, 0L, TimeUnit.MILLISECONDS);
+    }
+
+    public CompletableFuture<Bytes> writeRange(Bytes bytes, int from, int to, long timeout,
+                                               TimeUnit unit) {
+        final CompletableFuture<Bytes> future = new CompletableFuture<>();
+        final ByteBuffer buffer = bytes.buffer();
+        final int limit = buffer.limit();
+        final int position = buffer.position();
+        buffer.limit(buffer.position() + to);
+        buffer.position(buffer.position() + from);
+        write(bytes, timeout, unit).handle((_bytes, exc) -> {
+            buffer.limit(limit);
+            buffer.position(position);
+            if (exc != null) {
+                future.completeExceptionally(exc);
+            } else {
+                future.complete(bytes);
+            }
+            return null;
+        });
+        return future;
+    }
+
     @Override
     public void close() throws IOException {
         if (channel.isOpen()) {
