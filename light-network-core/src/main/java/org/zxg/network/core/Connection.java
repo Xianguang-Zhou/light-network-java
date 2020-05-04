@@ -134,6 +134,63 @@ public class Connection implements Closeable {
         return future;
     }
 
+    public CompletableFuture<Bytes> readUntil(Bytes bytes, byte[] separator) {
+        return readUntil(bytes, separator, 0L, TimeUnit.MILLISECONDS);
+    }
+
+    public CompletableFuture<Bytes> readUntil(Bytes bytes, byte[] separator, long timeout,
+                                              TimeUnit unit) {
+        if (0 == separator.length) {
+            return read(bytes, timeout, unit);
+        }
+        final CompletableFuture<Bytes> future = new CompletableFuture<>();
+        final ByteBuffer buffer = bytes.buffer();
+        buffer.clear();
+        buffer.limit(separator.length);
+        buffer.mark();
+        channel.read(buffer, timeout, unit, null, new CompletionHandler<Integer, RingArray>() {
+            @Override
+            public void completed(Integer result, RingArray lastBytes) {
+                if (buffer.hasRemaining()) {
+                    if (-1 != result) {
+                        channel.read(buffer, timeout, unit, lastBytes, this);
+                    } else {
+                        buffer.flip();
+                        future.completeExceptionally(new IncompleteReadException());
+                    }
+                } else {
+                    if (null == lastBytes) {
+                        final byte[] lastBytesContent = new byte[separator.length];
+                        buffer.reset();
+                        buffer.get(lastBytesContent);
+                        lastBytes = new RingArray(lastBytesContent);
+                    } else {
+                        lastBytes.add(buffer.get(buffer.position() - 1));
+                    }
+                    if (lastBytes.isEqual(separator)) {
+                        buffer.flip();
+                        future.complete(bytes);
+                    } else {
+                        if (-1 != result) {
+                            buffer.limit(buffer.position() + 1);
+                            channel.read(buffer, timeout, unit, lastBytes, this);
+                        } else {
+                            buffer.flip();
+                            future.completeExceptionally(new IncompleteReadException());
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void failed(Throwable exc, RingArray attachment) {
+                buffer.flip();
+                future.completeExceptionally(exc);
+            }
+        });
+        return future;
+    }
+
     public CompletableFuture<Bytes> write(Bytes bytes) {
         return write(bytes, 0L, TimeUnit.MILLISECONDS);
     }
