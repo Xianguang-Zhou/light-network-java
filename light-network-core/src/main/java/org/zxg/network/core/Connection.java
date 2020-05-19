@@ -134,6 +134,51 @@ public class Connection implements Closeable {
         return future;
     }
 
+    public CompletableFuture<Bytes> readUntil(Bytes bytes, byte separator) {
+        return readUntil(bytes, separator, 0L, TimeUnit.MILLISECONDS);
+    }
+
+    public CompletableFuture<Bytes> readUntil(Bytes bytes, byte separator, long timeout,
+                                              TimeUnit unit) {
+        final CompletableFuture<Bytes> future = new CompletableFuture<>();
+        final ByteBuffer buffer = bytes.buffer();
+        buffer.clear();
+        buffer.limit(1);
+        channel.read(buffer, timeout, unit, null, new CompletionHandler<Integer, Object>() {
+            @Override
+            public void completed(Integer result, Object attachment) {
+                if (buffer.hasRemaining()) {
+                    if (-1 != result) {
+                        channel.read(buffer, timeout, unit, null, this);
+                    } else {
+                        buffer.flip();
+                        future.completeExceptionally(new IncompleteReadException());
+                    }
+                } else {
+                    if (buffer.get(buffer.position() - 1) == separator) {
+                        buffer.flip();
+                        future.complete(bytes);
+                    } else {
+                        if (-1 != result) {
+                            buffer.limit(buffer.position() + 1);
+                            channel.read(buffer, timeout, unit, null, this);
+                        } else {
+                            buffer.flip();
+                            future.completeExceptionally(new IncompleteReadException());
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void failed(Throwable exc, Object attachment) {
+                buffer.flip();
+                future.completeExceptionally(exc);
+            }
+        });
+        return future;
+    }
+
     public CompletableFuture<Bytes> readUntil(Bytes bytes, byte[] separator) {
         return readUntil(bytes, separator, 0L, TimeUnit.MILLISECONDS);
     }
